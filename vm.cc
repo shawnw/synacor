@@ -80,7 +80,7 @@ private:
 		[&](){ A; s.push(pc); pc = val(a); }, // 17 call
 		[&](){ if (s.empty()) std::exit(0); pc = s.top(); s.pop(); }, // 18 ret
 		[&](){ A; std::cout << static_cast<char>(val(a)); }, // 19 out
-		[&](){ A; char d; std::cin >> d; writeval(a, d); }, // 20 in
+		[&](){ A; writeval(a, std::cin.get()); }, // 20 in
 		[&](){ pc += 1; } // 21 noop
 	}};
 
@@ -152,7 +152,6 @@ void image::run(void) {
 		auto insn = mem.at(pc);
 		ops.at(insn)();
 	}
-	std::cout << "final pc=" << pc << '\n';
 }
 
 int main(int argc, char **argv) {
