@@ -1,9 +1,16 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
+use feature qw/switch/;
+no warnings qw/experimental/;
+
+# Turn a Synacor Challenge binary image file into pseudo-assembly to
+# assist with debugging.
+# Usage:
+# perl disassem.pl challenge.bin > challenge.asm
 
 my @opcodes = (
-	["halt", 0],
+	["halt", 0], # op 0
 	["set", 2],
 	["push", 1],
 	["pop", 1],
@@ -24,7 +31,7 @@ my @opcodes = (
 	["ret", 0],
 	["out", 1],
 	["in", 1],
-	["noop", 0]
+	["noop", 0] # op 21
 	);
 
 sub is_register {
@@ -43,25 +50,26 @@ sub print_value {
 
 my $FILE;
 my $filename = shift;
-open $FILE, "<", $filename or die "Unable to open file $filename: $!\n";
-binmode $FILE;
+open $FILE, "<:raw:bytes", $filename or die "Unable to open file $filename: $!\n";
 
 my $addr = 0;
 my $word;
-while (sysread($FILE, $word, 2) == 2) {
+while (read($FILE, $word, 2) == 2) {
 	my $opcode = unpack "v", $word;
 	my $opdesc = $opcodes[$opcode];
-	die "Unknown opcode $opcode at $addr\n" && next unless defined $opdesc;
+	warn "Unknown opcode $opcode at $addr\n" && next unless defined $opdesc;
 	print "$addr: $$opdesc[0]";
 	if ($$opdesc[1] > 0) {
 		for (1 .. $$opdesc[1]) {
-			sysread $FILE, $word, 2;
+			read $FILE, $word, 2;
 			$addr += 1;
 			my $val = unpack "v", $word;
 			if ($$opdesc[0] eq "out") {
-				my $c = chr $val;
-				print " '$c'" if $c =~ /[[:ascii:]]/ && $c =~ /[[:print:]]/;
-				print " '\\n'" if $c eq "\n";
+				given (chr $val) {
+					print " '$_'" when /[[:ascii:]]/ && /[[:print:]]/; 
+					print " '\\n'" when $_ eq "\n";
+					default { print_value $val; }
+				}
 			} else {
 				print_value $val;
 			}
