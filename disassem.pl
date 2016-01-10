@@ -1,8 +1,9 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -s
 use warnings;
 use strict;
 use feature qw/switch/;
 no warnings qw/experimental/;
+use vars qw/$a/;
 
 # Turn a Synacor Challenge binary image file into pseudo-assembly to
 # assist with debugging.
@@ -58,7 +59,8 @@ while (read($FILE, $word, 2) == 2) {
 	my $opcode = unpack "v", $word;
 	my $opdesc = $opcodes[$opcode];
 	warn "Unknown opcode $opcode at $addr\n" && next unless defined $opdesc;
-	print "$addr: $$opdesc[0]";
+	print "$addr: " if $a;
+	print "$$opdesc[0]";
 	if ($$opdesc[1] > 0) {
 		for (1 .. $$opdesc[1]) {
 			read $FILE, $word, 2;
