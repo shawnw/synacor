@@ -43,7 +43,7 @@ sub is_label {
 	
 sub is_char_literal {
 	my $c = shift;
-	return $c =~ /^'.'$/ || $c =~ /^'\\.'$/;
+	return $c =~ /^'.'$/ || $c =~ /^'\\.'$/ || $c =~ /^''$/;
 }
 
 sub is_number {
@@ -51,11 +51,16 @@ sub is_number {
 }
 
 sub parse_char_literal {
-	my $c = shift;
-	if ($c =~ /^'(.)'$/) {
-		return ord $1;
-	} elsif ($c =~ /^'(\\.)'$/) {
-		return eval "ord('$1')";
+	for ($_[0]) {
+		when (/^'(.)'$/) {
+			return ord $1;
+		}
+		when (/^''$/) {
+			return ord " ";
+		}
+		when (/^'(\\.)'$/) {
+			return eval "ord(\"$1\")";
+		}
 	}
 }
 
@@ -83,8 +88,10 @@ while (<$IN>) {
 		when (/^([a-z]+)\s*(.*)/) {
 			my $name = $1;
 			die "Unknown instruction $name at line $.\n" unless exists $insns{$1};
-			my $insn = $insns{$1}; 
-			my @args = split / /, $2;
+			my $insn = $insns{$1};
+			my $argstr = $2;
+			$argstr =~ s/(?<!')' '/''/g;
+			my @args = split / /, $argstr;
 			my $lena = scalar @args;
 			my $lene = $#{$insn};
 			die "Wrong number of arguments for instruction $name at line ${.}. Got $lena, expected $lene.\n" unless $lena == $lene;
@@ -98,7 +105,7 @@ while (<$IN>) {
 						$valid = 1 when /a/ && is_number $arg;
 						$valid = 1 when /n/ && (is_number($arg) || is_char_literal($arg));
 					}
-					die "Invalid argument for instruction $name at line ${.}.\n" unless $valid;
+					warn "Invalid argument for instruction $name at line ${.}.\n" unless $valid;
 				}
 			}
 			my @binary = map {
