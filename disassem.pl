@@ -67,7 +67,8 @@ while (read($FILE, $word, 2) == 2) {
 			$addr += 1;
 			my $val = unpack "v", $word;
 			if ($$opdesc[0] eq "out") {
-				given (chr $val) {
+				for (chr $val) {
+					print " '\\''" when $_ eq "'";
 					print " '$_'" when /[[:ascii:]]/ && /[[:print:]]/; 
 					print " '\\n'" when $_ eq "\n";
 					default { print_value $val; }
