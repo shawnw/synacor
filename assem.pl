@@ -111,8 +111,7 @@ while (<$IN>) {
 			my @binary = map {
 				if (is_char_literal $_) {
 					parse_char_literal $_;
-				} elsif (is_register $_) {
-					/^r(\d)$/;
+				} elsif (/^r(\d)$/) {
 					$1 - 32768;
 				} else {
 					$_;
