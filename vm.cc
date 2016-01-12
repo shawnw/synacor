@@ -75,6 +75,7 @@ private:
 	numtype pc{0};
 	registers regs{{0,0,0,0,0,0,0,0}};
 	stack s;
+	bool debug;
 
 	numtype val(numtype);
 	numtype load(numtype);
@@ -120,7 +121,7 @@ private:
 #undef A
 	
 	public:	
-		explicit image(std::istream &, bool = false);
+		explicit image(std::istream &, bool = false, bool = false);
 		void run(void);
 		void dump(const char *);
 };
@@ -180,7 +181,7 @@ void image::regstore(numtype r, numtype val) {
 }
 
 // Load image from a file.
-image::image(std::istream &in, bool dump) {
+image::image(std::istream &in, bool dump, bool dbug) : debug(dbug) {
 	std::cout << "Reading program..." << std::flush;
 
 	if (dump) { // Load saved state information at start of image
@@ -273,17 +274,32 @@ void sigint_handler(int) {
 }
 
 int main(int argc, char **argv) {
-	if (argc != 2) {
-		std::cout << "Usage: " << argv[0] << " IMAGEFILE\n";
+	if (argc < 2) {
+		std::cout << "Usage: " << argv[0] << "[-sg] IMAGEFILE\n";
 		return 1;
 	}
 	
-	std::string filename{argv[1]};
-	bool saved = false;
-	if (filename == "-s") {
-		saved = true;
-		filename = "save.bin";
+	bool debug{false};
+	bool saved{false};
+
+	if (argc > 2) {
+		for (int i = 1; i < argc - 1; i += 1) {
+			if (std::strcmp(argv[i], "-g") == 0)
+				debug = true;
+			else if (std::strcmp(argv[i], "-s") == 0)
+				saved = true;
+			else if (argv[i][0] == '-') {
+				std::cerr << "Unknown option '" << argv[i] << "'.\n";
+				return 1;
+			}
+		}
 	}
+	if (argv[argc - 1][0] == '-') {
+		std::cerr << "Missing image file name.\n";
+		return 1;
+	}
+
+	std::string filename{argv[argc - 1]};
 	std::ifstream input(filename, std::ifstream::in | std::ifstream::binary);
 	if (!input.is_open()) {
 		std::cerr << "Unable to open " << filename << " for reading.\n";
@@ -292,7 +308,7 @@ int main(int argc, char **argv) {
 
 	std::signal(SIGINT, sigint_handler);
 	
-	image p{input, saved};
+	image p{input, saved, debug};
 	p_capture = &p;
 	p.run();
 	p_capture = nullptr;
