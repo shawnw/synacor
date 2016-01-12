@@ -21,6 +21,8 @@
 #include <string>
 #include <functional>
 #include <cstdint>
+#include <cstring>
+#include <csignal>
 
 #include <boost/endian/conversion.hpp>
 
@@ -111,13 +113,16 @@ private:
 		[&](){ pc += 1; } // 21 noop
 	}};
 
+	friend void sigint_handler(int);
+
 #undef ABC
 #undef AB
 #undef A
 	
 	public:	
-		explicit image(std::istream &);
-		void run(void);		
+		explicit image(std::istream &, bool = false);
+		void run(void);
+		void dump(const char *);
 };
 
 // Convert a numtype to a number, or return the value
@@ -174,8 +179,26 @@ void image::regstore(numtype r, numtype val) {
 #endif
 }
 
-image::image(std::istream &in) {
-	std::cout << "Reading program..." << std::flush; 
+// Load image from a file.
+image::image(std::istream &in, bool dump) {
+	std::cout << "Reading program..." << std::flush;
+
+	if (dump) { // Load saved state information at start of image
+		in >> pc;
+		for (int i = 0; i < 8; i += 1)
+			in >> regs[i];
+		stack::size_type ssize;
+		in >> ssize;
+		for (stack::size_type i = 0; i < ssize; i += 1) {
+			numtype n;
+			in >> n;
+			s.push(n);
+		}
+		while (in.peek() != '~')
+			in.get();
+		in.get();
+	}
+
 	 do {
 	 	 // Read 1k words at a time.
 	 	 char raw[sizeof(std::uint16_t) * 1024];
@@ -196,6 +219,43 @@ image::image(std::istream &in) {
 	 std::cout << " done. Read " << mem.size() << " words.\n";
 }
 
+// Dump current image to a file
+void image::dump(const char *filename) {
+	std::ofstream out(filename, std::ofstream::out | std::ofstream::binary);
+	if (!out.is_open()) {
+		std::cerr << "Unable to open file " << filename << " for writing.\n";
+		throw std::runtime_error("Unable to open output file.");
+	}
+
+	out << pc << '\n';
+
+	for (auto r : regs)
+		out << r << '\n';
+
+	out << s.size() << '\n';
+	stack sr;
+	while (!s.empty()) {
+		sr.push(s.top());
+		s.pop();
+	}
+	while (!sr.empty()) {
+		numtype n = sr.top();
+		sr.pop();
+		s.push(n);
+		out << n << '\n';
+	}
+
+	out << "~";
+
+	for (auto w : mem) {
+		char oword[2];
+		std::uint16_t word_le =
+			boost::endian::native_to_little(static_cast<std::uint16_t>(w));
+		std::memcpy(oword, &word_le, 2);
+		out.write(oword, 2);
+	}
+}
+
 void image::run(void) {
 	try {
 		while (pc < mem.size()) {
@@ -206,20 +266,36 @@ void image::run(void) {
 	}
 }
 
+image *p_capture = nullptr;
+void sigint_handler(int) {
+	if (p_capture)
+		p_capture->dump("save.bin");
+}
+
 int main(int argc, char **argv) {
 	if (argc != 2) {
 		std::cout << "Usage: " << argv[0] << " IMAGEFILE\n";
 		return 1;
 	}
 	
-	std::ifstream input(argv[1], std::ifstream::in | std::ifstream::binary);
+	std::string filename{argv[1]};
+	bool saved = false;
+	if (filename == "-s") {
+		saved = true;
+		filename = "save.bin";
+	}
+	std::ifstream input(filename, std::ifstream::in | std::ifstream::binary);
 	if (!input.is_open()) {
-		std::cerr << "Unable to open " << argv[1] << " for reading.\n";
+		std::cerr << "Unable to open " << filename << " for reading.\n";
 		return 1;
 	}
+
+	std::signal(SIGINT, sigint_handler);
 	
-	image p{input};
+	image p{input, saved};
+	p_capture = &p;
 	p.run();
+	p_capture = nullptr;
 	std::cout << '\n';
 	return 0;
 }
