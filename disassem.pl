@@ -3,12 +3,23 @@ use warnings;
 use strict;
 use feature qw/switch/;
 no warnings qw/experimental/;
-use vars qw/$a/;
+use vars qw/$a $b/;
 
 # Turn a Synacor Challenge binary image file into pseudo-assembly to
 # assist with debugging.
 # Usage:
-# perl disassem.pl challenge.bin > challenge.asm
+# perl disassem.pl [OPTIONS] challenge.bin challenge.asm
+#
+# Options: -a to prefix each line with its address
+#          -b to append a comment with the raw numeric values of each line
+
+my $filename = shift;
+open my $FILE, "<:raw:bytes", $filename
+	or die "Unable to open file $filename: $!\n";
+
+$filename = shift;
+open my $OUT, ">", $filename
+	or die "Unable to open file $filename: $!\n";
 
 my @opcodes = (
 	["halt", 0], # op 0
@@ -43,34 +54,38 @@ sub is_register {
 sub print_value {
 	my $v = shift;
 	if (is_register $v) {
-		print " r", $v - 32768;
+		print $OUT " r", $v - 32768;
 	} else {
-		print " $v";
+		print $OUT " $v";
 	}
 }
 
-my $FILE;
-my $filename = shift;
-open $FILE, "<:raw:bytes", $filename or die "Unable to open file $filename: $!\n";
-
 my $addr = 0;
 my $word;
+
 while (read($FILE, $word, 2) == 2) {
 	my $opcode = unpack "v", $word;
+	$addr += 1;
+	if ($opcode >= scalar @opcodes) {
+		print $OUT "$addr: " if $a;
+		print $OUT ".word $opcode\n";
+		next;
+	}
 	my $opdesc = $opcodes[$opcode];
-	warn "Unknown opcode $opcode at $addr\n" && next unless defined $opdesc;
-	print "$addr: " if $a;
-	print "$$opdesc[0]";
+	my @raw = ($opcode);
+	print $OUT "$addr: " if $a;
+	print $OUT $$opdesc[0];
 	if ($$opdesc[1] > 0) {
 		for (1 .. $$opdesc[1]) {
-			read $FILE, $word, 2;
+			die "Unexpected end of file\n" unless read($FILE, $word, 2) == 2;
 			$addr += 1;
 			my $val = unpack "v", $word;
+			push @raw, $val;
 			if ($$opdesc[0] eq "out") {
 				for (chr $val) {
-					print " '\\''" when $_ eq "'";
-					print " '$_'" when /[[:ascii:]]/ && /[[:print:]]/; 
-					print " '\\n'" when $_ eq "\n";
+					print $OUT " '\\''" when $_ eq "'";
+					print $OUT " '$_'" when /[[:ascii:]]/ && /[[:print:]]/; 
+					print $OUT " '\\n'" when $_ eq "\n";
 					default { print_value $val; }
 				}
 			} else {
@@ -78,9 +93,9 @@ while (read($FILE, $word, 2) == 2) {
 			}
 		}
 	}
-	$addr += 1;
-	print "\n";
+	print $OUT " # @raw" if $b;
+	print $OUT "\n";
 }
 close $FILE;
-
+close $OUT;
 

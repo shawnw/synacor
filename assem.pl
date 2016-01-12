@@ -74,7 +74,7 @@ open my $IN, "<", $infile or die "Unable to open $infile: $!\n";
 
 while (<$IN>) {
 	chomp;
-	s/#.*$//;
+	s/\s*#.*$//; # Eat comments
 	next if length $_ == 0;
 	for ($_) {
 		when (/^([A-Z]\w*):$/) {
@@ -85,13 +85,16 @@ while (<$IN>) {
 			push @parsed, [$1];
 			$addr += 1;
 		}
-		when (/^([a-z]+)\s*(.*)/) {
+		when (/^([a-z]+)(?:\s+(.+))?/) {
 			my $name = $1;
 			die "Unknown instruction $name at line $.\n" unless exists $insns{$1};
 			my $insn = $insns{$1};
 			my $argstr = $2;
-			$argstr =~ s/(?<!')' '/''/g;
-			my @args = split / /, $argstr;
+			my @args;
+			if (defined $argstr) {
+				$argstr =~ s/(?<!')' '/''/g;
+				@args = split / /, $argstr;
+			}
 			my $lena = scalar @args;
 			my $lene = $#{$insn};
 			die "Wrong number of arguments for instruction $name at line ${.}. Got $lena, expected $lene.\n" unless $lena == $lene;
@@ -103,7 +106,7 @@ while (<$IN>) {
 						$valid = 1 when /r/ && is_register $arg;
 						$valid = 1 when /l/ && is_label $arg;
 						$valid = 1 when /a/ && is_number $arg;
-						$valid = 1 when /n/ && (is_number($arg) || is_char_literal($arg));
+						$valid = 1 when /n/ && (is_number $arg or is_char_literal $arg);
 					}
 					warn "Invalid argument for instruction $name at line ${.}.\n" unless $valid;
 				}
@@ -134,6 +137,7 @@ for (@parsed) {
 			$labels{$_};
 		} else {
 			$_;
-		} } @$_);
+		}
+	} @$_);
 }
 close $OUT;
