@@ -1,5 +1,13 @@
 /* Virtual Machine for Synacor Challenge, take 1 */
 
+
+/* Usage: vm [-s -d -g] IMGFILE
+*
+* Options: -s IMGFILE is a saved state from a previous session
+*          -d Don't dump a saved state on SIGINT.
+*          -g Debug mode
+*/
+
 /* Normally, when I write an interpeter for a small bytecode language, I
  * use a big switch statement to dispatch, one case per opcode. This time
  * I decided to try something slightly different, though, and use an array
@@ -16,10 +24,12 @@
 #include <array>
 #include <stack>
 #include <vector>
+#include <deque>
 #include <stdexcept>
 #include <fstream>
 #include <string>
 #include <functional>
+#include <regex>
 #include <cstdint>
 #include <cstring>
 #include <csignal>
@@ -70,17 +80,22 @@ private:
 	using registers = std::array<numtype, 8>;
 	using stack = std::stack<numtype>;
 	using memory = std::vector<numtype>;
+	using char_pool = std::deque<char>;
 	
 	memory mem;
-	numtype pc{0};
+	numtype pc{0}, cpc{0};
 	registers regs{{0,0,0,0,0,0,0,0}};
 	stack s;
 	bool debug;
+	char_pool input_buffer;
 
 	numtype val(numtype);
 	numtype load(numtype);
 	void store(numtype, numtype);
 	void regstore(numtype, numtype);
+
+	char next_char(void);
+	void debugger(const std::string &);
 
 	struct end_of_program{};
 
@@ -110,7 +125,7 @@ private:
 		[&](){ A; s.push(pc); pc = val(a); }, // 17 call
 		[&](){ if (s.empty()) throw end_of_program(); pc = s.top(); s.pop(); }, // 18 ret
 		[&](){ A; std::cout.put(static_cast<char>(val(a))); }, // 19 out
-		[&](){ A; regstore(a, std::cin.get()); }, // 20 in
+		[&](){ A; regstore(a, next_char()); }, // 20 in
 		[&](){ pc += 1; } // 21 noop
 	}};
 
@@ -123,6 +138,7 @@ private:
 	public:	
 		explicit image(std::istream &, bool = false, bool = false);
 		void run(void);
+		void dump(const std::string &s) { dump(s.c_str()); }
 		void dump(const char *);
 };
 
@@ -220,6 +236,49 @@ image::image(std::istream &in, bool dump, bool dbug) : debug(dbug) {
 	 std::cout << " done. Read " << mem.size() << " words.\n";
 }
 
+
+// Return the next char to be read from standard input
+char image::next_char(void) {
+	if (!input_buffer.empty()) {
+		char c = input_buffer.front();
+		input_buffer.pop_front();
+		return c;
+	} else {
+		while (true) {
+			std::string line;
+			if (std::getline(std::cin, line) && line.length() > 0) {
+				if (debug && line[0] == '~') {
+					line.erase(0, 1);
+					debugger(line);
+				} else {
+					std::cerr << "Read: '" << line << "'\n";
+					line += '\n';
+					input_buffer.assign(std::next(line.begin()), line.end());
+					return line[0];
+				}
+			}	else {
+			// Error!
+			}
+		}
+	}
+}
+
+void image::debugger(const std::string &cmd) {
+	static std::regex dump_re{"dump (.+)"};
+	std::smatch fields;
+
+	if (cmd == "quit") {
+		std::cout << "DEBUG: Quitting.\n";
+		throw end_of_program();
+	} else if (std::regex_match(cmd, fields, dump_re)) {
+		std::cout << "DEBUG: Dumping state to " << fields[1] << '\n';
+		dump(fields[1].str());
+	} else {
+		std::cout << "DEBUG: Unknown command.\n";
+	}
+}
+
+
 // Dump current image to a file
 void image::dump(const char *filename) {
 	std::ofstream out(filename, std::ofstream::out | std::ofstream::binary);
@@ -228,7 +287,7 @@ void image::dump(const char *filename) {
 		throw std::runtime_error("Unable to open output file.");
 	}
 
-	out << pc << '\n';
+	out << cpc << '\n';
 
 	for (auto r : regs)
 		out << r << '\n';
@@ -240,26 +299,24 @@ void image::dump(const char *filename) {
 		s.pop();
 	}
 	while (!sr.empty()) {
-		numtype n = sr.top();
+		s.push(sr.top());
 		sr.pop();
-		s.push(n);
-		out << n << '\n';
+		out << s.top() << '\n';
 	}
 
 	out << "~";
 
 	for (auto w : mem) {
-		char oword[2];
 		std::uint16_t word_le =
 			boost::endian::native_to_little(static_cast<std::uint16_t>(w));
-		std::memcpy(oword, &word_le, 2);
-		out.write(oword, 2);
+		out.write(reinterpret_cast<char *>(&word_le), 2);
 	}
 }
 
 void image::run(void) {
 	try {
 		while (pc < mem.size()) {
+			cpc = pc;
 			AT(ops, mem[pc])();
 		}
 	} catch (end_of_program) {
@@ -271,16 +328,18 @@ image *p_capture = nullptr;
 void sigint_handler(int) {
 	if (p_capture)
 		p_capture->dump("save.bin");
+	std::exit(0);
 }
 
 int main(int argc, char **argv) {
 	if (argc < 2) {
-		std::cout << "Usage: " << argv[0] << "[-sg] IMAGEFILE\n";
+		std::cout << "Usage: " << argv[0] << "[-s -d -g] IMAGEFILE\n";
 		return 1;
 	}
 	
 	bool debug{false};
 	bool saved{false};
+	bool nodump{false};
 
 	if (argc > 2) {
 		for (int i = 1; i < argc - 1; i += 1) {
@@ -288,6 +347,8 @@ int main(int argc, char **argv) {
 				debug = true;
 			else if (std::strcmp(argv[i], "-s") == 0)
 				saved = true;
+			else if (std::strcmp(argv[i], "-d") == 0)
+				nodump = true;
 			else if (argv[i][0] == '-') {
 				std::cerr << "Unknown option '" << argv[i] << "'.\n";
 				return 1;
@@ -306,12 +367,13 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	std::signal(SIGINT, sigint_handler);
+//	if (!nodump)
+//		std::signal(SIGINT, sigint_handler);
 	
 	image p{input, saved, debug};
-	p_capture = &p;
+//	p_capture = &p;
 	p.run();
-	p_capture = nullptr;
+//	p_capture = nullptr;
 	std::cout << '\n';
 	return 0;
 }
