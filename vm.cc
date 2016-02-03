@@ -276,6 +276,7 @@ bool image::debugger(const std::string &cmdstr) {
 		return false;
 	} else if (cmd == "n") {
 		// n: continue to next instruction.
+		return false;
 	} else if (cmd == "step") {
 		// step (on|off): turn on or off instruction level stepping
 		cmdstream >> arg;
