@@ -26,4 +26,7 @@
 *.exe
 *.out
 *.app
-*.cc~
+
+# Backups
+*~
+

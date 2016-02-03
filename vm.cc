@@ -27,6 +27,7 @@
 #include <deque>
 #include <stdexcept>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <functional>
 #include <regex>
@@ -251,33 +252,45 @@ char image::next_char(void) {
 					line.erase(0, 1);
 					debugger(line);
 				} else {
-					std::cerr << "Read: '" << line << "'\n";
 					line += '\n';
 					input_buffer.assign(std::next(line.begin()), line.end());
 					return line[0];
 				}
 			}	else {
-			// Error!
+				// Error!
+				throw std::runtime_error("Input failed");
 			}
 		}
 	}
 }
 
-void image::debugger(const std::string &cmd) {
-	static std::regex dump_re{"dump (.+)"};
-	std::smatch fields;
-
+void image::debugger(const std::string &cmdstr) {
+	std::istringstream cmdstream{cmdstr};
+	std::string cmd, arg;
+	
+	cmdstream >> cmd;
 	if (cmd == "quit") {
 		std::cout << "DEBUG: Quitting.\n";
 		throw end_of_program();
-	} else if (std::regex_match(cmd, fields, dump_re)) {
-		std::cout << "DEBUG: Dumping state to " << fields[1] << '\n';
-		dump(fields[1].str());
+	} else if (cmd == "dump") {
+		cmdstream >> arg;
+		std::cout << "DEBUG: Dumping state to " << arg << '\n';
+		dump(arg);
+	} else if (cmd == "show") {
+		cmdstream >> arg;
+		int r = std::stoi(arg);
+		std::cout << "DEBUG: Register " << r << " = " << regs[r] << '\n';
+	} else if (cmd == "setx") {
+		cmdstream >> arg;
+		int r = std::stoi(arg);
+		cmdstream >> arg;
+		numtype val = std::stoul(arg, nullptr, 16);
+		std::cout << "DEBUG: Setting register " << r << " = " << val << '\n';
+		regs[r] = val;
 	} else {
 		std::cout << "DEBUG: Unknown command.\n";
 	}
 }
-
 
 // Dump current image to a file
 void image::dump(const char *filename) {
@@ -309,7 +322,7 @@ void image::dump(const char *filename) {
 	for (auto w : mem) {
 		std::uint16_t word_le =
 			boost::endian::native_to_little(static_cast<std::uint16_t>(w));
-		out.write(reinterpret_cast<char *>(&word_le), 2);
+		out.write(reinterpret_cast<char *>(&word_le), sizeof word_le);
 	}
 }
 
@@ -324,13 +337,6 @@ void image::run(void) {
 	}
 }
 
-image *p_capture = nullptr;
-void sigint_handler(int) {
-	if (p_capture)
-		p_capture->dump("save.bin");
-	std::exit(0);
-}
-
 int main(int argc, char **argv) {
 	if (argc < 2) {
 		std::cout << "Usage: " << argv[0] << "[-s -d -g] IMAGEFILE\n";
@@ -339,7 +345,6 @@ int main(int argc, char **argv) {
 	
 	bool debug{false};
 	bool saved{false};
-	bool nodump{false};
 
 	if (argc > 2) {
 		for (int i = 1; i < argc - 1; i += 1) {
@@ -347,8 +352,6 @@ int main(int argc, char **argv) {
 				debug = true;
 			else if (std::strcmp(argv[i], "-s") == 0)
 				saved = true;
-			else if (std::strcmp(argv[i], "-d") == 0)
-				nodump = true;
 			else if (argv[i][0] == '-') {
 				std::cerr << "Unknown option '" << argv[i] << "'.\n";
 				return 1;
@@ -367,13 +370,9 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-//	if (!nodump)
-//		std::signal(SIGINT, sigint_handler);
-	
 	image p{input, saved, debug};
-//	p_capture = &p;
 	p.run();
-//	p_capture = nullptr;
+
 	std::cout << '\n';
 	return 0;
 }
