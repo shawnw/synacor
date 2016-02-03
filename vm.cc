@@ -130,8 +130,6 @@ private:
 		[&](){ pc += 1; } // 21 noop
 	}};
 
-	friend void sigint_handler(int);
-
 #undef ABC
 #undef AB
 #undef A
@@ -293,8 +291,8 @@ bool image::debugger(const std::string &cmdstr) {
 	} else if (cmd == "showr" || cmd == "showx") {
 		// show N: Show a single register.
 		bool wanthex = cmd == "showx";
-		cmdstream >> arg;
-		int r = std::stoi(arg);
+		int r;
+		cmdstream >> r;
 		std::cout << "DEBUG: Register r" << r << " = ";
 		if (wanthex)
 			std::cout << std::hex;
@@ -305,29 +303,61 @@ bool image::debugger(const std::string &cmdstr) {
 		for (int i = 0; i < 8; i += 1) 
 			std::cout << 'r' << i << " = " << std::hex << regs[i] << std::dec << ' ';
 		std::cout << '\n';
-	} else if (cmd == "showpc") {
-		std::cout << "DEBUG: Program Counter = " << std::hex << cpc << std::dec << '\n';
-	} else if (cmd == "setr") {
+	} else if (cmd == "setx") {
 		// setx N V: Set a register to a new base-16 value.
-		cmdstream >> arg;
-		int r = std::stoi(arg);
-		cmdstream >> arg;
-		numtype val = std::stoul(arg, nullptr, 16);
+		int r;
+		numtype val;
+		cmdstream >> r >> std::hex >> val >> std::dec;
 		std::cout << "DEBUG: Setting register " << r << " = " << std::hex << val
 			<< std::dec << '\n';
 		regs[r] = val;
 	} else if (cmd == "setpc") {
 		// setpc A: Set the program counter to a new base-16 value
-		cmdstream >> arg;
-		numtype addr = std::stoul(arg, nullptr, 16);
+		numtype addr;
+		cmdstream >> std::hex >> addr >> std::dec;
 		std::cout << "DEBUG: Setting program counter.\n";
 		cpc = pc = addr;
 	} else if (cmd == "break") {
 		// break A: Set a breakpoint at base-16 address.
-		cmdstream >> arg;
-		numtype addr = std::stoul(arg, nullptr, 16);
-		std::cout << "DEBUG: Setting breakpoint at " << std::hex << addr << std::dec << '\n';
+		numtype addr;
+		cmdstream >> std::hex >> addr >> std::dec;
+		std::cout << "DEBUG: Setting breakpoint.\n";
 		breakpoints.insert(addr);
+	} else if (cmd == "unbreak") {
+		// unbreak A: Clear a breakpoint.
+		numtype addr;
+		cmdstream >> std::hex >> addr >> std::dec;
+		std::cout << "DEBUG: Clearing breakpoint.\n";
+		breakpoints.erase(addr);
+	} else if (cmd == "showmem" || cmd == "showmemx") {
+		// showmem A: Show the word at base-16 address.
+		numtype addr;
+		cmdstream >> std::hex >> addr >> std::dec;
+		std::cout << "DEBUG: Value at address " << std::hex << addr << ": ";
+		if (cmd == "showmem")
+			std::cout.setf(std::ios::dec);
+		std::cout << mem[addr] << std::dec << '\n';
+	} else if (cmd == "stack") {
+		stack s2;
+		std::cout << "DEBUG: Stack:" << std::hex;
+		while (!s.empty()) {
+			numtype t = s.top();
+			s.pop();
+			std::cout << ' ' << t;
+			s2.push(t);
+		}
+		while (!s2.empty()) {
+			numtype t = s2.top();
+			s2.pop();
+			s.push(t);
+		}
+		std::cout << std::dec << '\n';
+	} else if (cmd == "push") {
+		// push V: push value onto stack
+		numtype val;
+		cmdstream >> std::hex >> val;
+		std::cout << "DEBUG: Pushing " << std::hex << val << std::dec << " onto the stack.\n";
+		s.push(val);
 	} else {
 		std::cout << "DEBUG: Unknown command.\n";
 	}
@@ -378,7 +408,7 @@ void image::run(void) {
 				if (!stepping)
 					std::cout << "DEBUG: Breakpoint at " << std::hex << pc << std::dec << '\n';
 				do {
-					std::cout << "DEBUG: " << std::flush;
+					std::cout << "DEBUG(" << std::hex << pc << std::dec << "): " << std::flush;
 					std::getline(std::cin, debugcmd);
 					stepping = true;
 				} while (debugger(debugcmd));
