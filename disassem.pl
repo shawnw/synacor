@@ -3,7 +3,7 @@ use warnings;
 use strict;
 use feature qw/switch/;
 no warnings qw/experimental/;
-use vars qw/$a $b/;
+use vars qw/$a $b $x/;
 
 # Turn a Synacor Challenge binary image file into pseudo-assembly to
 # assist with debugging.
@@ -12,6 +12,7 @@ use vars qw/$a $b/;
 #
 # Options: -a to prefix each line with its address
 #          -b to append a comment with the raw numeric values of each line
+#          -x to use base 16 for printing instruction arguments.
 
 my $filename = shift;
 open my $FILE, "<:raw:bytes", $filename
@@ -55,8 +56,10 @@ sub print_value {
 	my $v = shift;
 	if (is_register $v) {
 		print $OUT " r", $v - 32768;
-	} else {
+	} elsif ($x) {
 		printf $OUT " 0x%X", $v;
+	} else {
+		print $OUT " ", $v;
 	}
 }
 
@@ -88,6 +91,22 @@ while (read($FILE, $word, 2) == 2) {
 					print $OUT " '$_'" when /[[:ascii:]]/ && /[[:print:]]/; 
 					print $OUT " '\\n'" when $_ eq "\n";
 					default { print_value $val; }
+				}
+			} elsif ($$opdesc[0] =~ /jmp|jt|jf|rmem/) {
+				if ($_ == 1) {
+					print_value $val;
+				} else {
+					printf $OUT " 0x%04X", $val;
+				}
+			} elsif ($$opdesc[0] =~ /wmem|call/) {
+				if ($_ == 1) {
+					if (is_register $val) {
+						print_value $val;
+					} else {
+						printf $OUT " 0x%04X", $val;
+					}
+				} else {
+					print_value $val;
 				}
 			} else {
 				print_value $val;
