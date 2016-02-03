@@ -96,7 +96,7 @@ private:
 	void regstore(numtype, numtype);
 
 	char next_char(void);
-	void debugger(const std::string &);
+	bool debugger(const std::string &);
 
 	struct end_of_program{};
 
@@ -199,7 +199,7 @@ void image::regstore(numtype r, numtype val) {
 
 // Load image from a file.
 image::image(std::istream &in, bool dump, bool dbug)
-	: debug(dbug), stepping(false) {
+	: debug(dbug), stepping(dbug) {
 	std::cout << "Reading program..." << std::flush;
 
 	if (dump) { // Load saved state information at start of image
@@ -265,13 +265,22 @@ char image::next_char(void) {
 	}
 }
 
-void image::debugger(const std::string &cmdstr) {
+bool image::debugger(const std::string &cmdstr) {
 	std::istringstream cmdstream{cmdstr};
 	std::string cmd, arg;
 	
 	cmdstream >> cmd;
 	if (cmd == "c") {
-		// c: continue;
+		// c: continue execution, stop stepping;
+		stepping = false;
+		return false;
+	} else if (cmd == "n") {
+		// n: continue to next instruction.
+	} else if (cmd == "step") {
+		// step (on|off): turn on or off instruction level stepping
+		cmdstream >> arg;
+		stepping = arg == "on";
+		std::cout << "DEBUG: stepping " << (stepping ? "on\n" : "off\n");
 	} else if (cmd == "quit") {
 		std::cout << "DEBUG: Quitting.\n";
 		throw end_of_program();
@@ -287,23 +296,23 @@ void image::debugger(const std::string &cmdstr) {
 		int r = std::stoi(arg);
 		std::cout << "DEBUG: Register r" << r << " = ";
 		if (wanthex)
-			std::cout << "0x" << std::hex;
+			std::cout << std::hex;
 		std::cout << regs[r] << std::dec << '\n';
 	} else if (cmd == "showallr") {
 		// showall: Show all 8 registers
 		std::cout << "DEBUG: Registers: ";
 		for (int i = 0; i < 8; i += 1) 
-			std::cout << 'r' << i << " = 0x" << std::hex << regs[i] << std::dec << ' ';
+			std::cout << 'r' << i << " = " << std::hex << regs[i] << std::dec << ' ';
 		std::cout << '\n';
 	} else if (cmd == "showpc") {
-		std::cout << "DEBUG: Program Counter = 0x" << std::hex << cpc << std::dec << '\n';
-	} else if (cmd == "setrx") {
+		std::cout << "DEBUG: Program Counter = " << std::hex << cpc << std::dec << '\n';
+	} else if (cmd == "setr") {
 		// setx N V: Set a register to a new base-16 value.
 		cmdstream >> arg;
 		int r = std::stoi(arg);
 		cmdstream >> arg;
 		numtype val = std::stoul(arg, nullptr, 16);
-		std::cout << "DEBUG: Setting register " << r << " = 0x" << std::hex << val
+		std::cout << "DEBUG: Setting register " << r << " = " << std::hex << val
 			<< std::dec << '\n';
 		regs[r] = val;
 	} else if (cmd == "setpc") {
@@ -316,11 +325,12 @@ void image::debugger(const std::string &cmdstr) {
 		// break A: Set a breakpoint at base-16 address.
 		cmdstream >> arg;
 		numtype addr = std::stoul(arg, nullptr, 16);
-		std::cout << "DEBUG: Setting breakpoint at 0x" << std::hex << addr << std::dec << '\n';
+		std::cout << "DEBUG: Setting breakpoint at " << std::hex << addr << std::dec << '\n';
 		breakpoints.insert(addr);
 	} else {
 		std::cout << "DEBUG: Unknown command.\n";
 	}
+	return true;
 }
 
 // Dump current image to a file
@@ -361,11 +371,16 @@ void image::run(void) {
 	try {
 		while (pc < mem.size()) {
 			cpc = pc;
-			if (debug && breakpoints.count(pc)) {
+			
+			if (debug && (stepping || breakpoints.count(pc))) {
 				std::string debugcmd;
-				std::cout << "DEBUG: Breakpoint at 0x" << std::hex << pc << std::dec << '\n';
-				std::getline(std::cin, debugcmd);
-				debugger(debugcmd);
+				if (!stepping)
+					std::cout << "DEBUG: Breakpoint at " << std::hex << pc << std::dec << '\n';
+				do {
+					std::cout << "DEBUG: " << std::flush;
+					std::getline(std::cin, debugcmd);
+					stepping = true;
+				} while (debugger(debugcmd));
 			}
 			
 			AT(ops, mem[pc])();
@@ -408,6 +423,9 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	if (debug)
+		std::cout.setf(std::ios::showbase);
+	
 	image p{input, saved, debug};
 	p.run();
 
