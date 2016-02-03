@@ -96,7 +96,11 @@ while (read($FILE, $word, 2) == 2) {
 				if ($_ == 1) {
 					print_value $val;
 				} else {
-					printf $OUT " 0x%04X", $val;
+					if (is_register $val) {
+						print_value $val;
+					} else {
+						printf $OUT " 0x%04X", $val;
+					}
 				}
 			} elsif ($$opdesc[0] =~ /wmem|call/) {
 				if ($_ == 1) {
