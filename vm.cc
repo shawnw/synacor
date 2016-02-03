@@ -30,10 +30,8 @@
 #include <sstream>
 #include <string>
 #include <functional>
-#include <regex>
+#include <unordered_set>
 #include <cstdint>
-#include <cstring>
-#include <csignal>
 
 #include <boost/endian/conversion.hpp>
 
@@ -88,6 +86,8 @@ private:
 	registers regs{{0,0,0,0,0,0,0,0}};
 	stack s;
 	bool debug;
+	bool stepping;
+	std::unordered_set<numtype> breakpoints;
 	char_pool input_buffer;
 
 	numtype val(numtype);
@@ -198,7 +198,8 @@ void image::regstore(numtype r, numtype val) {
 }
 
 // Load image from a file.
-image::image(std::istream &in, bool dump, bool dbug) : debug(dbug) {
+image::image(std::istream &in, bool dump, bool dbug)
+	: debug(dbug), stepping(false) {
 	std::cout << "Reading program..." << std::flush;
 
 	if (dump) { // Load saved state information at start of image
@@ -269,24 +270,54 @@ void image::debugger(const std::string &cmdstr) {
 	std::string cmd, arg;
 	
 	cmdstream >> cmd;
-	if (cmd == "quit") {
+	if (cmd == "c") {
+		// c: continue;
+	} else if (cmd == "quit") {
 		std::cout << "DEBUG: Quitting.\n";
 		throw end_of_program();
 	} else if (cmd == "dump") {
+		// dump filename: Dump state to a file.
 		cmdstream >> arg;
 		std::cout << "DEBUG: Dumping state to " << arg << '\n';
 		dump(arg);
-	} else if (cmd == "show") {
+	} else if (cmd == "showr" || cmd == "showx") {
+		// show N: Show a single register.
+		bool wanthex = cmd == "showx";
 		cmdstream >> arg;
 		int r = std::stoi(arg);
-		std::cout << "DEBUG: Register " << r << " = " << regs[r] << '\n';
-	} else if (cmd == "setx") {
+		std::cout << "DEBUG: Register r" << r << " = ";
+		if (wanthex)
+			std::cout << "0x" << std::hex;
+		std::cout << regs[r] << std::dec << '\n';
+	} else if (cmd == "showallr") {
+		// showall: Show all 8 registers
+		std::cout << "DEBUG: Registers: ";
+		for (int i = 0; i < 8; i += 1) 
+			std::cout << 'r' << i << " = 0x" << std::hex << regs[i] << std::dec << ' ';
+		std::cout << '\n';
+	} else if (cmd == "showpc") {
+		std::cout << "DEBUG: Program Counter = 0x" << std::hex << cpc << std::dec << '\n';
+	} else if (cmd == "setrx") {
+		// setx N V: Set a register to a new base-16 value.
 		cmdstream >> arg;
 		int r = std::stoi(arg);
 		cmdstream >> arg;
 		numtype val = std::stoul(arg, nullptr, 16);
-		std::cout << "DEBUG: Setting register " << r << " = " << val << '\n';
+		std::cout << "DEBUG: Setting register " << r << " = 0x" << std::hex << val
+			<< std::dec << '\n';
 		regs[r] = val;
+	} else if (cmd == "setpc") {
+		// setpc A: Set the program counter to a new base-16 value
+		cmdstream >> arg;
+		numtype addr = std::stoul(arg, nullptr, 16);
+		std::cout << "DEBUG: Setting program counter.\n";
+		cpc = pc = addr;
+	} else if (cmd == "break") {
+		// break A: Set a breakpoint at base-16 address.
+		cmdstream >> arg;
+		numtype addr = std::stoul(arg, nullptr, 16);
+		std::cout << "DEBUG: Setting breakpoint at 0x" << std::hex << addr << std::dec << '\n';
+		breakpoints.insert(addr);
 	} else {
 		std::cout << "DEBUG: Unknown command.\n";
 	}
@@ -330,6 +361,13 @@ void image::run(void) {
 	try {
 		while (pc < mem.size()) {
 			cpc = pc;
+			if (debug && breakpoints.count(pc)) {
+				std::string debugcmd;
+				std::cout << "DEBUG: Breakpoint at 0x" << std::hex << pc << std::dec << '\n';
+				std::getline(std::cin, debugcmd);
+				debugger(debugcmd);
+			}
+			
 			AT(ops, mem[pc])();
 		}
 	} catch (end_of_program) {
