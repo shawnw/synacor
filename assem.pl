@@ -47,7 +47,7 @@ sub is_char_literal {
 }
 
 sub is_number {
-	return $_[0] =~ /^\d+$/;
+	return $_[0] =~ /^\d+$/ || $_[0] =~ /^0x[[:xdigit:]]+$/;
 }
 
 sub parse_char_literal {
@@ -62,6 +62,14 @@ sub parse_char_literal {
 			return eval "ord(\"$1\")";
 		}
 	}
+}
+
+sub parse_number {
+	if ($_[0] =~ /^0x/) {
+		return hex $_[0];
+	} else {
+		return $_[0];
+  }
 }
 
 my %labels;
@@ -81,8 +89,8 @@ while (<$IN>) {
 			die "Duplicate label $1\n" if exists $labels{$1};
 			$labels{$1} = $addr;
 		}
-		when (/^\.word (\d+)$/) {
-			push @parsed, [$1];
+		when (/^\.word (\d+|0x[[:xdigit:]]+)$/ ) {
+			push @parsed, [parse_number $1];
 			$addr += 1;
 		}
 		when (/^([a-z]+)(?:\s+(.+))?/) {
@@ -116,6 +124,8 @@ while (<$IN>) {
 					parse_char_literal $_;
 				} elsif (/^r(\d)$/) {
 					$1 - 32768;
+				} elsif (/^0x/) {
+					hex $_;
 				} else {
 					$_;
 				}

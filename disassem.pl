@@ -56,7 +56,7 @@ sub print_value {
 	if (is_register $v) {
 		print $OUT " r", $v - 32768;
 	} else {
-		print $OUT " $v";
+		printf $OUT " 0x%X", $v;
 	}
 }
 
@@ -64,16 +64,17 @@ my $addr = 0;
 my $word;
 
 while (read($FILE, $word, 2) == 2) {
-	my $opcode = unpack "v", $word;
+	printf $OUT "0x%04X: ", $addr if $a;
 	$addr += 1;
+
+	my $opcode = unpack "v", $word;
 	if ($opcode >= scalar @opcodes) {
-		print $OUT "$addr: " if $a;
 		print $OUT ".word $opcode\n";
 		next;
 	}
+
 	my $opdesc = $opcodes[$opcode];
 	my @raw = ($opcode);
-	print $OUT "$addr: " if $a;
 	print $OUT $$opdesc[0];
 	if ($$opdesc[1] > 0) {
 		for (1 .. $$opdesc[1]) {
