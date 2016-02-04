@@ -16,55 +16,15 @@ using regs = std::pair<numtype, numtype>;
 using stack = std::stack<numtype>;
 using cache = std::map<regs, regs>;
 
-#if 0
-
-// This recursive version runs into stack problems real fast, but it's elegant.
-// Not being able to use it makes me sad.
-
-regs solver_fast(numtype, numtype, numtype, stack &, cache &);
-regs
-solver_helper(numtype r0, numtype r1, numtype r7, stack &s, cache &c) {
-	// 178B
-	if (r0 == 0) {
-		r0 = (r1 + 1) % M;
-		return std::make_pair(r0, r1);
-	}
-	// 1793
-	if (r1 == 0) {
-		r0 -= 1;
-		r1 = r7;
-		return solver(r0, r1, r7, s, c);
-	}
-	// 17A0
-	s.push(r0);
-	r1 -= 1;
-	std::tie(r0, r1) = solver(r0, r1, r7, s, c);
-	r1 = r0;
-	r0 = s.top() - 1;
-	s.pop();
-	return solver(r0, r1, r7, s, c);
-}
-
-regs
-solver_fast(numtype r0, numtype r1, numtype r7, stack &s, cache &c) {
-	auto cv = c.find(std::make_pair(r0, r1));
-	if (cv != c.end()) {
-		return cv->second;
-	}
-	auto res = solver_helper(r0, r1, r7, s, c);
-	c.emplace(std::make_pair(r0, r1), res);
-	return res;
-}
-#endif
-
-// This is the reference version adapted to cache things, which speeds
+// This is the reference version adapted to cache calculations, which speeds
 // it up tremendously.
-regs solver(numtype r0, numtype r1, numtype r7, stack &s, cache &c) {
+regs solver(numtype r0, numtype r1, numtype r7) {
 	// UGLY CODE ALERT!
+	stack s;
+	cache c;
 	std::stack<void*> callstack;
 	std::stack<regs> regstack;
 	void *lbl;
-	
 	callstack.push(&&lend);
 	
 l178B:
@@ -129,25 +89,26 @@ lend:
 
 
 int main(int argc, char **argv) {
-	numtype r0, r1;
 
 	std::cout.setf(std::ios::showbase);
 	std::cout << std::hex;
 	
 	if (argc == 2) {
+		numtype r0, r1;
 		numtype r7 = std::stoul(argv[1]);
 		cache c;
 		stack s;
-		std::tie(r0, r1) = solver(4, 1, r7, s, c);
-		std::cout << "r0=" << r0 << " r1=" << r1 << " r7=" << r7 << '\n';
+		std::tie(r0, r1) = solver(4, 1, r7);
+		std::cout << "r0=" << r0 << "\nr1=" << r1 << "\nr7=" << r7 << '\n';
 		return 0;
 	}
 		
 	#pragma omp parallel for
 	for (int r7 = 5; r7 < M; r7 += 1) {
+		numtype r0, r1;
 		cache c;
 		stack s;
-		std::tie(r0, r1) = solver(4, 1, r7, s, c);
+		std::tie(r0, r1) = solver(4, 1, r7);
 		if (r0 == 6) {
 			std::cout << "\nr0 = " << r0 << "\nr1 = " << r1 << "\nr7 = " << r7 << '\n';
 			std::exit(0);
