@@ -7,6 +7,8 @@
 #include <tuple>
 #include <map>
 
+/* Code is G++ specific. Also works better with OpenMP turned on. */
+
 using numtype = std::uint_fast16_t;
 constexpr numtype M{32768}; 
 
@@ -16,7 +18,8 @@ using cache = std::map<regs, regs>;
 
 #if 0
 
-// This recursive version runs into stack problems real fast.
+// This recursive version runs into stack problems real fast, but it's elegant.
+// Not being able to use it makes me sad.
 
 regs solver_fast(numtype, numtype, numtype, stack &, cache &);
 regs
@@ -54,7 +57,8 @@ solver_fast(numtype r0, numtype r1, numtype r7, stack &s, cache &c) {
 }
 #endif
 
-
+// This is the reference version adapted to cache things, which speeds
+// it up tremendously.
 regs solver(numtype r0, numtype r1, numtype r7, stack &s, cache &c) {
 	// UGLY CODE ALERT!
 	std::stack<void*> callstack;
@@ -62,8 +66,6 @@ regs solver(numtype r0, numtype r1, numtype r7, stack &s, cache &c) {
 	void *lbl;
 	
 	callstack.push(&&lend);
-	
-	int n = 0;
 	
 l178B:
 	auto cv = c.find(std::make_pair(r0, r1));
@@ -73,16 +75,6 @@ l178B:
 		callstack.pop();
 		goto *lbl;
 	}
-	
-#if 0
-	if (s.empty()) 
-		std::cout << "a r0=" << r0 << " r1=" << r1 << '\n';
-	else
-		std::cout << "a r0=" << r0 << " r1=" << r1 << " s=" << s.top() << " sl=" << s.size() << '\n';
-
-	if (++n == 10)
-		std::exit(0);
-#endif	
 	
 	if (r0 != 0)
 		goto l1793;
@@ -138,6 +130,9 @@ lend:
 
 int main(int argc, char **argv) {
 	numtype r0, r1;
+
+	std::cout.setf(std::ios::showbase);
+	std::cout << std::hex;
 	
 	if (argc == 2) {
 		numtype r7 = std::stoul(argv[1]);
