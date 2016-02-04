@@ -92,7 +92,7 @@ while (read($FILE, $word, 2) == 2) {
 					print $OUT " '\\n'" when $_ eq "\n";
 					default { print_value $val; }
 				}
-			} elsif ($$opdesc[0] =~ /jmp|jt|jf|rmem/) {
+			} elsif ($$opdesc[0] =~ /jt|jf|rmem/) {
 				if ($_ == 1) {
 					print_value $val;
 				} else {
@@ -102,7 +102,7 @@ while (read($FILE, $word, 2) == 2) {
 						printf $OUT " 0x%04X", $val;
 					}
 				}
-			} elsif ($$opdesc[0] =~ /wmem|call/) {
+			} elsif ($$opdesc[0] =~ /jmp|wmem|call/) {
 				if ($_ == 1) {
 					if (is_register $val) {
 						print_value $val;
