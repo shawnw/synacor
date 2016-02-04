@@ -135,7 +135,8 @@ private:
 #undef A
 	
 	public:	
-		explicit image(std::istream &, bool = false, bool = false);
+		explicit image(std::istream &, bool = false);
+		void rundebug(void);
 		void run(void);
 		void dump(const std::string &s) { dump(s.c_str()); }
 		void dump(const char *);
@@ -196,8 +197,8 @@ void image::regstore(numtype r, numtype val) {
 }
 
 // Load image from a file.
-image::image(std::istream &in, bool dump, bool dbug)
-	: debug(dbug), stepping(dbug) {
+image::image(std::istream &in, bool dump)
+	: debug(false), stepping(false) {
 	std::cout << "Reading program..." << std::flush;
 
 	if (dump) { // Load saved state information at start of image
@@ -398,7 +399,9 @@ void image::dump(const char *filename) {
 	}
 }
 
-void image::run(void) {
+void image::rundebug(void) {
+	debug = true;
+	stepping = true;
 	try {
 		while (pc < mem.size()) {
 			cpc = pc;
@@ -414,6 +417,17 @@ void image::run(void) {
 				} while (debugger(debugcmd));
 			}
 			
+			AT(ops, mem[pc])();
+		}
+	} catch (end_of_program) {
+		return;
+	}
+}
+
+void image::run(void) {
+	try {
+		while (pc < mem.size()) {
+			cpc = pc;
 			AT(ops, mem[pc])();
 		}
 	} catch (end_of_program) {
@@ -457,9 +471,12 @@ int main(int argc, char **argv) {
 	if (debug)
 		std::cout.setf(std::ios::showbase);
 	
-	image p{input, saved, debug};
-	p.run();
-
+	image p{input, saved};
+	if (debug)
+		p.rundebug();
+	else
+		p.run();
+	
 	std::cout << '\n';
 	return 0;
 }
