@@ -304,11 +304,11 @@ bool image::debugger(const std::string &cmdstr) {
 		for (int i = 0; i < 8; i += 1) 
 			std::cout << 'r' << i << " = " << std::hex << regs[i] << std::dec << ' ';
 		std::cout << '\n';
-	} else if (cmd == "setx") {
+	} else if (cmd == "setr" || cmd == "setx") {
 		// setx N V: Set a register to a new base-16 value.
 		int r;
 		numtype val;
-		cmdstream >> r >> std::hex >> val >> std::dec;
+		cmdstream >> r >> (cmd == "setr" ? std::dec : std::hex) >> val >> std::dec;
 		std::cout << "DEBUG: Setting register " << r << " = " << std::hex << val
 			<< std::dec << '\n';
 		regs[r] = val;
@@ -359,6 +359,10 @@ bool image::debugger(const std::string &cmdstr) {
 		cmdstream >> std::hex >> val;
 		std::cout << "DEBUG: Pushing " << std::hex << val << std::dec << " onto the stack.\n";
 		s.push(val);
+	} else if (cmd == "pop") {
+		// pop: pop value off the stack
+		std::cout << "DEBUG: Popping " << std::hex << s.top() << std::dec << " off of the stack.\n";
+		s.pop();
 	} else {
 		std::cout << "DEBUG: Unknown command.\n";
 	}
