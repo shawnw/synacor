@@ -7,15 +7,15 @@
 enum class type { NUM, OP };
 enum class edgeop { ADD, SUB, MUL };
 struct node {
-	bool goal;
+	bool goal{false};
 	type t;
 	union {
 		edgeop op;
 		int val;
 	} v;
-	node(void) : t(type::NUM), goal(false) { v.val = -1; }
-	explicit node(int v_) : t(type::NUM), goal(false) { v.val = v_; }
-	explicit node(edgeop o_) : t(type::OP), goal(false) { v.op = o_; }
+	node(void) : t(type::NUM) { v.val = -1; }
+	explicit node(int v_) : t(type::NUM) { v.val = v_; }
+	explicit node(edgeop o_) : t(type::OP) { v.op = o_; }
 };
 
 using coords = std::pair<int, int>;
