@@ -3,7 +3,6 @@
 #include <utility>
 #include <tuple>
 #include <array>
-#include <deque>
 
 // Solver for another puzzle in synacor.
 enum class type { NUM, OP };
@@ -21,14 +20,15 @@ struct node {
 };
 
 using coords = std::pair<int, int>;
-using paths = std::vector<std::deque<coords>>;
+using coordlist = std::vector<coords>;
+using paths = std::vector<coordlist>;
 using grid = std::array<std::array<node, 4>, 4>;
 
 // Paths of this or longer are too long.
 constexpr int upper_limit = 14;
 constexpr int goal = 30; // Goal weight
 
-void rove(const grid &g, int x, int y, paths &p, int steps, int weight, std::deque<coords> route) {
+void rove(const grid &g, int x, int y, paths &p, int steps, int weight, coordlist route) {
 	if (++steps >= upper_limit) {
 		// Too long of a path.
 		return;
