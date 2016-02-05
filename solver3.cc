@@ -2,6 +2,8 @@
 #include <vector>
 #include <utility>
 #include <tuple>
+#include <array>
+#include <deque>
 
 // Solver for another puzzle in synacor.
 enum class type { NUM, OP };
@@ -19,14 +21,14 @@ struct node {
 };
 
 using coords = std::pair<int, int>;
-using paths = std::vector<std::vector<coords>>;
-using grid = std::vector<std::vector<node>>;
+using paths = std::vector<std::deque<coords>>;
+using grid = std::array<std::array<node, 4>, 4>;
 
 // Paths of this or longer are too long.
 constexpr int upper_limit = 14;
 constexpr int goal = 30; // Goal weight
 
-void rove(const grid &g, int x, int y, paths &p, int steps, int weight, std::vector<coords> route) {
+void rove(const grid &g, int x, int y, paths &p, int steps, int weight, std::deque<coords> route) {
 	if (++steps >= upper_limit) {
 		// Too long of a path.
 		return;
@@ -61,7 +63,7 @@ void rove(const grid &g, int x, int y, paths &p, int steps, int weight, std::vec
 	if (x == 3 && y == 3) {
 		// Going to the ending room is a fail unless weight is right.
 		if (weight == goal)
-			p.push_back(route);
+			p.push_back(std::move(route));
 		return;
 	}
 
@@ -78,45 +80,29 @@ void rove(const grid &g, int x, int y, paths &p, int steps, int weight, std::vec
 
 grid
 build_graph(void) {
-	grid g(4, std::vector<node>(4));
-	g[0][0] = node(22);
-	g[0][1] = node(edgeop::SUB);
-	g[0][2] = node(9);
-	g[0][3] = node(edgeop::MUL);
-
-	g[1][0] = node(edgeop::ADD);
-	g[1][1] = node(4);
-	g[1][2] = node(edgeop::SUB);
-	g[1][3] = node(18);
-
-	g[2][0] = node(4);
-	g[2][1] = node(edgeop::MUL);
-	g[2][2] = node(11);
-	g[2][3] = node(edgeop::MUL);
-
-	g[3][0] = node(edgeop::MUL);
-	g[3][1] = node(8);
-	g[3][2] = node(edgeop::SUB);
-	g[3][3] = node(1);
+	grid g{{
+		{ node(22), node(edgeop::SUB), node(9), node(edgeop::MUL) },
+		{ node(edgeop::ADD), node(4), node(edgeop::SUB), node(18) },
+		{ node(4), node(edgeop::MUL), node(11), node(edgeop::MUL) },
+		{ node(edgeop::MUL), node(8), node(edgeop::SUB), node(1) }
+	}};
 	g[3][3].goal = true;
-
 	return g;
 }
 	
 int main(void) {
-	grid g = build_graph();
+	grid g{build_graph()};
 	paths p;
-	std::vector<coords> r;
 	
-	rove(g, 0, 0, p, 0, 0, r);
+	rove(g, 0, 0, p, 0, 0, {});
 	
 	std::cout << "Found " << p.size() << " paths.\n";
 	for (auto &path : p) {
 		std::cout << "Length: " << path.size() << '\n';
 		std::cout << "Route:";
 		coords prev = path.front();
-		path.erase(path.begin());
-		for (auto &c : path) {
+		path.pop_front();
+		for (const auto &c : path) {
 			if (prev.first < c.first)
 				std::cout << " N";
 			else if (prev.first > c.first)
