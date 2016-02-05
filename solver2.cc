@@ -6,6 +6,7 @@
 #include <utility>
 #include <tuple>
 #include <map>
+#include <unordered_map>
 
 /* Code is G++ specific. Also works better with OpenMP turned on. */
 
@@ -14,7 +15,16 @@ constexpr numtype M{32768};
 
 using regs = std::pair<numtype, numtype>;
 using stack = std::stack<numtype>;
-using cache = std::map<regs, regs>;
+
+auto hashnum = std::hash<numtype>();
+
+struct hash_regs {
+	size_t operator()(const regs &r) const {
+		return (hashnum(r.first) << 16) | (hashnum(r.second) & 0xFFFF);
+	}
+};
+
+using cache = std::unordered_map<regs, regs, hash_regs>;
 
 // This is the reference version adapted to cache calculations, which speeds
 // it up tremendously.
@@ -88,6 +98,29 @@ lend:
 }
 
 
+// The function is a variation of an Ackermann function.
+// Attempts to solve it recursively, like the one below, 
+// always run out of stack space, even with caching values
+// to try to reduce the amount of recursion.
+
+regs
+solver2(numtype r0, numtype r1, numtype r7, cache &c) {
+	auto cv = c.find(std::make_pair(r0, r1));
+	if (cv != c.end())
+		return cv->second;
+	if (r0 == 0)
+		return std::make_pair((r1 + 1) % M, r1);
+	else if (r1 == 0) {
+		auto res = solver2(r0 - 1, r7, r7, c);
+		c.emplace(std::make_pair(r0, r1), res);
+		return res;
+	} else {
+		auto res = solver2(r0 - 1, solver2(r0, r1 - 1, r7, c).first, r7, c);
+		c.emplace(std::make_pair(r0, r1), res);
+		return res;
+	}
+}
+
 int main(int argc, char **argv) {
 
 	std::cout.setf(std::ios::showbase);
@@ -95,9 +128,11 @@ int main(int argc, char **argv) {
 	
 	if (argc == 2) {
 		numtype r0, r1;
-		numtype r7 = std::stoul(argv[1]);
+		int base = 10;
+		if (argv[1][0] && argv[1][0] == '0' && argv[1][1] == 'x')
+			base = 16;
+		numtype r7 = std::stoul(argv[1], 0, base);
 		cache c;
-		stack s;
 		std::tie(r0, r1) = solver(4, 1, r7);
 		std::cout << "r0=" << r0 << "\nr1=" << r1 << "\nr7=" << r7 << '\n';
 		return 0;
