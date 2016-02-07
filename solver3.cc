@@ -21,15 +21,14 @@ struct node {
 
 using coords = std::pair<int, int>;
 using coordlist = std::vector<coords>;
-using paths = std::vector<coordlist>;
 using grid = std::array<std::array<node, 4>, 4>;
 
-// Paths of this or longer are too long.
-constexpr int upper_limit = 14;
+constexpr int max_steps = 18;
 constexpr int goal = 30; // Goal weight
 
-void rove(const grid &g, int x, int y, paths &p, int steps, int weight, coordlist route) {
-	if (++steps >= upper_limit) {
+void rove(const grid &g, int x, int y, coordlist &p, int steps, int weight, coordlist route) {
+  steps += 1;
+	if (steps > max_steps || (!p.empty() && steps > p.size())) {
 		// Too long of a path.
 		return;
 	}
@@ -62,8 +61,8 @@ void rove(const grid &g, int x, int y, paths &p, int steps, int weight, coordlis
 
 	if (x == 3 && y == 3) {
 		// Going to the ending room is a fail unless weight is right.
-		if (weight == goal)
-			p.push_back(std::move(route));
+		if (weight == goal && (p.empty() || route.size() < p.size()))
+			p = std::move(route);
 		return;
 	}
 
@@ -92,16 +91,17 @@ build_graph(void) {
 	
 int main(void) {
 	grid g{build_graph()};
-	paths p;
+	coordlist path;
 	
-	rove(g, 0, 0, p, 0, 0, {});
-	
-	std::cout << "Found " << p.size() << " paths.\n";
-	for (auto &path : p) {
-		std::cout << "Length: " << path.size() << '\n';
+	rove(g, 0, 0, path, 0, 0, {});
+
+	if (path.empty()) {
+	  std::cout << "No path found!\n";
+	} else {
+	  std::cout << "Length: " << path.size() << '\n';
 		std::cout << "Route:";
 		coords prev = path.front();
-		path.pop_front();
+		path.erase(path.begin());
 		for (const auto &c : path) {
 			if (prev.first < c.first)
 				std::cout << " N";
