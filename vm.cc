@@ -164,7 +164,7 @@ numtype image::val(numtype n) {
 numtype image::load(numtype addr) {
 #ifndef UNSAFE
 	if (!is_number(addr))
-		throw std::runtime_error("Trying to laod from an invalid address.");
+		throw std::runtime_error("Trying to load from an invalid address.");
 #endif
 	if (mem.size() <= addr)
 		return 0;
@@ -267,10 +267,10 @@ char image::next_char(void) {
 bool image::debugger(const std::string &cmdstr) {
 	std::istringstream cmdstream{cmdstr};
 	std::string cmd, arg;
-	
+	// Should clean this up instead of having one big chain of if/else
 	cmdstream >> cmd;
 	if (cmd == "c") {
-		// c: continue execution, stop stepping;
+		// c: continue execution until next breakpoint, stop stepping.
 		stepping = false;
 		return false;
 	} else if (cmd == "n") {
@@ -290,7 +290,7 @@ bool image::debugger(const std::string &cmdstr) {
 		std::cout << "DEBUG: Dumping state to " << arg << '\n';
 		dump(arg);
 	} else if (cmd == "showr" || cmd == "showx") {
-		// show N: Show a single register.
+		// showr N: Show a single register.
 		bool wanthex = cmd == "showx";
 		int r;
 		cmdstream >> r;
@@ -298,65 +298,74 @@ bool image::debugger(const std::string &cmdstr) {
 		if (wanthex)
 			std::cout << std::hex;
 		std::cout << regs[r] << std::dec << '\n';
-	} else if (cmd == "showallr") {
-		// showall: Show all 8 registers
+	} else if (cmd == "showallr" || cmd == "showallx") {
+		// showallr: Show all 8 registers
 		std::cout << "DEBUG: Registers: ";
 		for (int i = 0; i < 8; i += 1) 
-			std::cout << 'r' << i << " = " << std::hex << regs[i] << std::dec << ' ';
+			std::cout << 'r' << i << " = " << (cmd == "showallx" ? std::hex : std::dec)
+				<< regs[i] << std::dec << ' ';
 		std::cout << '\n';
 	} else if (cmd == "setr" || cmd == "setx") {
+		// setr N V: Set a register to a new base-10 value.
 		// setx N V: Set a register to a new base-16 value.
 		int r;
 		numtype val;
-		cmdstream >> r >> (cmd == "setr" ? std::dec : std::hex) >> val >> std::dec;
-		std::cout << "DEBUG: Setting register " << r << " = " << std::hex << val
+		cmdstream >> r >> (cmd == "setr" ? std::dec : std::hex) >> val;
+		std::cout << "DEBUG: Setting register r" << r << " = " << std::hex << val
 			<< std::dec << '\n';
 		regs[r] = val;
+	} else if (cmd == "showpc" || cmd == "showpcx") {
+		// showpc: Show the program counter in base 10 or 16.
+		if (cmd == "showpcx")
+			std::cout << std::hex;
+		std::cout << "DEBUG: pc=" << cpc << std::dec << '\n';
 	} else if (cmd == "setpc") {
 		// setpc A: Set the program counter to a new base-16 value
 		numtype addr;
-		cmdstream >> std::hex >> addr >> std::dec;
+		cmdstream >> std::hex >> addr;
 		std::cout << "DEBUG: Setting program counter.\n";
 		cpc = pc = addr;
 	} else if (cmd == "break") {
 		// break A: Set a breakpoint at base-16 address.
 		numtype addr;
-		cmdstream >> std::hex >> addr >> std::dec;
+		cmdstream >> std::hex >> addr;
 		std::cout << "DEBUG: Setting breakpoint.\n";
 		breakpoints.insert(addr);
 	} else if (cmd == "unbreak") {
 		// unbreak A: Clear a breakpoint.
 		numtype addr;
-		cmdstream >> std::hex >> addr >> std::dec;
+		cmdstream >> std::hex >> addr;
 		std::cout << "DEBUG: Clearing breakpoint.\n";
 		breakpoints.erase(addr);
 	} else if (cmd == "showmem" || cmd == "showmemx") {
-		// showmem A: Show the word at base-16 address.
+		// showmemx A: Show the word at base-16 address.
 		numtype addr;
-		cmdstream >> std::hex >> addr >> std::dec;
+		cmdstream >> std::hex >> addr;
 		std::cout << "DEBUG: Value at address " << std::hex << addr << ": ";
-		if (cmd == "showmem")
-			std::cout.setf(std::ios::dec);
+		if (cmd == "showmemx")
+			std::cout << std::hex;
 		std::cout << mem[addr] << std::dec << '\n';
-	} else if (cmd == "stack") {
+	} else if (cmd == "stack" || cmd == "stackx") {
 		stack s2;
-		std::cout << "DEBUG: Stack:" << std::hex;
+		std::cout << "DEBUG: Stack:";
+		if (cmd == "stackx")
+			std::cout << std::hex;
 		while (!s.empty()) {
-			numtype t = s.top();
+			s2.push(s.top());
 			s.pop();
-			std::cout << ' ' << t;
-			s2.push(t);
+			std::cout << ' ' << s2.top();
 		}
 		while (!s2.empty()) {
-			numtype t = s2.top();
+			s.push(s2.top());
 			s2.pop();
-			s.push(t);
 		}
 		std::cout << std::dec << '\n';
-	} else if (cmd == "push") {
-		// push V: push value onto stack
+	} else if (cmd == "push" || cmd == "pushx") {
+		// push V: push base-10 or base-16 value onto stack
 		numtype val;
-		cmdstream >> std::hex >> val;
+		if (cmd == "pushx")
+			cmdstream >> std::hex;
+		cmdstream >> val;
 		std::cout << "DEBUG: Pushing " << std::hex << val << std::dec << " onto the stack.\n";
 		s.push(val);
 	} else if (cmd == "pop") {
@@ -414,10 +423,11 @@ void image::rundebug(void) {
 				std::string debugcmd;
 				if (!stepping)
 					std::cout << "DEBUG: Breakpoint at " << std::hex << pc << std::dec << '\n';
+				stepping = true;
+
 				do {
-					std::cout << "DEBUG(" << std::hex << pc << std::dec << "): " << std::flush;
+					std::cout << "DEBUG(" << std::hex << pc << std::dec << ")> " << std::flush;
 					std::getline(std::cin, debugcmd);
-					stepping = true;
 				} while (debugger(debugcmd));
 			}
 			
